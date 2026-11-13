@@ -8,6 +8,7 @@
 #include "screens.h"
 #include "video.h"
 #include "menu.h"
+#include "sound.h"
 
 #define FPS 70 /* mode 13h refresh, the game is vsync-locked */
 #define KEY_SPEED 0x180
@@ -446,6 +447,19 @@ int main(int argc, char *argv[])
 			a->autoplay = 1;
 		} else if (!strcmp(argv[i], "--sheet")) {
 			a->sheet = 1;
+		} else if (!strcmp(argv[i], "--menu") && i + 1 < argc) {
+			const char *page = argv[++i];
+			a->menu.page = !strcmp(page, "options") ? MENU_OPTIONS :
+				!strcmp(page, "sectors") ? MENU_SECTORS :
+				!strcmp(page, "scores") ? MENU_SCORES : MENU_MAIN;
+		} else if (!strcmp(argv[i], "--audio-out") && i + 1 < argc) {
+			audio_path = argv[++i];
+		} else if (!strcmp(argv[i], "--music-track") && i + 1 < argc) {
+			audio_track = atoi(argv[++i]);
+		} else if (!strcmp(argv[i], "--sound-effect") && i + 1 < argc) {
+			audio_effect = atoi(argv[++i]);
+		} else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) {
+			audio_seconds = atoi(argv[++i]);
 		} else {
 			exe_path = argv[i];
 		}
@@ -467,12 +481,25 @@ int main(int argc, char *argv[])
 	}
 	menu_load(&a->menu, exe_config_path());
 	a->diff = difficulty_override >= 0 ? (Difficulty)difficulty_override : a->menu.difficulty;
+	if (audio_path) {
+		int ok = sound_export_wav(audio_path, audio_track, audio_effect, audio_seconds);
+		if (!ok)
+			fprintf(stderr, "Audio export failed.\n");
+		SDL_Quit();
+		return ok ? 0 : 1;
+	}
 
 	if (!video_init(640, 400, 0)) {
 		SDL_Quit();
 		return 1;
 	}
 	SDL_ShowCursor(SDL_DISABLE);
+	if (!shot_path) {
+		if (!sound_init())
+			fprintf(stderr, "Continuing without audio.\n");
+		atexit(sound_shutdown);
+		sound_enable(a->menu.sound, a->menu.music);
+	}
 
 	rng_seed(shot_path ? 1 : (uint16_t)SDL_GetTicks());
 	a->menu.difficulty = a->diff;

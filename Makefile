@@ -12,6 +12,8 @@ OBJS = src/main.c \
 	src/player.c \
 	src/screens.c \
 	src/menu.c \
+	src/sound.c \
+	src/third_party/nuked_opl3/opl3.c
 
 #CC specifies which compiler we're using
 CC = gcc

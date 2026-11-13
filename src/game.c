@@ -98,6 +98,7 @@ int game_start_level(Game *g, int zone, int level, int restore)
 	g->status_msg = g->bonus_stage ? 1 : 0;
 	g->paused = 0;
 	memset(&g->in, 0, sizeof(g->in));
+	sound_music(lv->params.music);
 	return 1;
 }
 
@@ -238,6 +239,8 @@ void game_frame(Game *g)
 	if (g->paused)
 		return;
 	if (g->last_ball) {
+		if (g->last_ball == 1)
+			sound_play(SFX_LAST_BALL);
 		/* frozen while FATAL BALL blinks */
 		if (++g->last_ball >= 0x54)
 			g->last_ball = 0;
