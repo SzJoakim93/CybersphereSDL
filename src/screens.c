@@ -1,19 +1,22 @@
 #include <string.h>
 #include "screens.h"
+#include "exe.h"
 
 #define TEXT_FIRST 0x6537
 #define TEXT_LAST  0x684c
 
-static uint8_t text[TEXT_LAST - TEXT_FIRST];
+static uint8_t text[TEXT_LAST - TEXT_FIRST + 32];
 
 void text_reset(void)
 {
-	memcpy(text, ds_ptr(TEXT_FIRST, sizeof(text)), sizeof(text));
+	size_t length = exe_data_offset(TEXT_LAST) - exe_data_offset(TEXT_FIRST);
+	memset(text, 0, sizeof(text));
+	memcpy(text, ds_ptr(TEXT_FIRST, (uint16_t)length), length);
 }
 
 uint8_t *text_at(uint16_t off)
 {
-	return &text[off - TEXT_FIRST];
+	return &text[exe_data_offset(off) - exe_data_offset(TEXT_FIRST)];
 }
 
 void text_score(uint16_t off, uint32_t v)
@@ -120,28 +123,42 @@ void text_tally(Game *g, int y, int bonus_index)
 	g->pl.score += total;
 }
 
-/* Stand-in palette until the menu backgrounds (and their palettes) are recovered in phase 4. */
-static void screen_palette(int bright)
+void screen_background(uint16_t offset, int bright, int logo)
 {
-	uint8_t pal[0x40 * 3];
-	int i;
+	Level background;
+	const uint8_t *record = exe_ptr(SEG_LAYER2, offset, LEVEL_SIZE);
+	int x, y;
 
-	for (i = 0; i < 0x40; i++) {
-		int k = i & 7;
-		pal[i * 3 + 0] = (uint8_t)(0x18 + k * 5);
-		pal[i * 3 + 1] = (uint8_t)(0x20 + k * 4);
-		pal[i * 3 + 2] = 0x3f;
+	memset(&background, 0, sizeof(background));
+	memcpy(&background.layer2, record, LEVEL_SIZE);
+	background.bricks.shift = background.layer2.shift;
+	gfx_bricks(&background);
+	gfx_set_palette(background.layer2.pal, 0, 256, bright);
+	if (logo) {
+		const uint8_t *pixels = exe_ptr(0x2674, 0x8a5a, 155 * 58);
+		for (y = 0; y < 58; y++)
+			for (x = 0; x < 155; x++)
+				if (pixels[y * 155 + x])
+					gfx_fb[(y + 16) * SCREEN_W + x + 82] = pixels[y * 155 + x];
 	}
-	pal[0] = pal[1] = pal[2] = 0;
-	pal[3] = pal[4] = pal[5] = 0x3f; /* colour 1: score digits */
-	gfx_set_palette(pal, 0, 0x40, bright);
 }
 
-/* 1000:0a54 without the background picture */
 void screen_render(uint16_t block1, uint16_t block2, int bright)
 {
-	gfx_clear();
+	uint16_t background = 0x0b04;
+	if (block1 == TXT_GAME_OVER)
+		background = 0x0582;
+	else if (block1 == TXT_LIVES)
+		background = 0x1086;
+	else if (block1 == TXT_STAGE_COMPLETE)
+		background = 0x1608;
+	else if (block1 == TXT_ENTER_BONUS)
+		background = 0x1b8a;
+	else if (block1 == TXT_SURVIVAL)
+		background = 0x210c;
+	else if (block1 == 0x657d || block1 == 0x6622)
+		background = 0x2c10;
+	screen_background(background, bright, 1);
 	gfx_message(text_at(block1));
 	gfx_message(text_at(block2));
-	screen_palette(bright);
 }

@@ -10,7 +10,8 @@ OBJS = src/main.c \
 	src/brick.c \
 	src/bonus.c \
 	src/player.c \
-	src/screens.c
+	src/screens.c \
+	src/menu.c \
 
 #CC specifies which compiler we're using
 CC = gcc

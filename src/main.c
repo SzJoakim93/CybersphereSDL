@@ -7,6 +7,7 @@
 #include "game.h"
 #include "screens.h"
 #include "video.h"
+#include "menu.h"
 
 #define FPS 70 /* mode 13h refresh, the game is vsync-locked */
 #define KEY_SPEED 0x180
@@ -18,10 +19,12 @@ static const char *exe_candidates[] = {
 /* Levels per zone; zone 0 holds the bonus stages (checks at 1000:028b) */
 static const int zone_levels[6] = { 10, 9, 8, 7, 8, 9 };
 
-typedef enum { NEXT_PLAY, NEXT_PLAY_RESTORE, NEXT_PLAY_BONUS, NEXT_ADVANCE, NEXT_NEW_GAME } Next;
+typedef enum { NEXT_PLAY, NEXT_PLAY_RESTORE, NEXT_PLAY_BONUS, NEXT_ADVANCE, NEXT_NEW_GAME, NEXT_MENU } Next;
 
 typedef struct {
 	Game g;
+	Menu menu;
+	int menu_active, direct_start;
 	Difficulty diff;
 	int cheats, autoplay;
 	int zone, level;        /* 87D2/87D4 */
@@ -37,9 +40,19 @@ typedef struct {
 	int mouse_x, mouse_y;
 } App;
 
+static void open_menu(App *a, MenuPage page)
+{
+	a->playing = 0;
+	a->menu_active = 1;
+	menu_open(&a->menu, page);
+	SDL_WM_GrabInput(SDL_GRAB_OFF);
+	SDL_ShowCursor(SDL_ENABLE);
+}
+
 static void show_screen(App *a, uint16_t block1, uint16_t block2, Next next)
 {
 	a->playing = 0;
+	a->menu_active = 0;
 	a->block1 = block1;
 	a->block2 = block2;
 	a->fade = 0;
@@ -63,6 +76,8 @@ static void start_play(App *a, int restore, int bonus)
 	}
 	g->cheats = a->cheats;
 	a->playing = 1;
+	a->menu_active = 0;
+	SDL_ShowCursor(SDL_DISABLE);
 	SDL_WM_GrabInput(a->autoplay ? SDL_GRAB_OFF : SDL_GRAB_ON);
 }
 
@@ -77,12 +92,16 @@ static void show_intro(App *a)
 /* 1000:0129 */
 static void new_game(App *a)
 {
+	a->diff = a->menu.difficulty;
 	game_init(&a->g, a->diff);
 	text_reset();
 	a->zone = a->start_zone;
 	a->level = a->start_level;
 	a->bonus_index = rng(10);
+	if (a->direct_start || a->autoplay)
 	show_intro(a);
+	else
+		open_menu(a, MENU_SECTORS);
 }
 
 static void advance(App *a)
@@ -93,16 +112,25 @@ static void advance(App *a)
 		show_intro(a);
 		return;
 	}
-	/* zone done; the zone select menu comes with phase 4, so just take the next one */
+	a->menu.completed |= 1u << (a->zone - 1);
+	if (!menu_save(&a->menu, exe_config_path()))
+		fprintf(stderr, "Could not save completed sectors.\n");
 	a->level = 0;
 	g->life_dropped = 0;
 	g->bonus_stages_played = 0;
 	g->has_saved = 0;
-	if (++a->zone > 5) {
-		new_game(a);
+	if (menu_all_completed(&a->menu)) {
+		text_score(a->diff == DIFF_NOVICE ? 0x66eb : 0x6618, g->pl.score);
+		show_screen(a, a->diff == DIFF_NOVICE ? 0x6622 : 0x657d, TXT_PRESS_FIRE, NEXT_MENU);
 		return;
 	}
+	if (a->autoplay) {
+		if (++a->zone > 5)
+			a->zone = 1;
 	show_intro(a);
+	} else {
+		open_menu(a, MENU_SECTORS);
+	}
 }
 
 /* Result handling of the main loop at 1000:01cb / 1000:03a2 */
@@ -113,8 +141,8 @@ static void level_finished(App *a)
 
 	SDL_WM_GrabInput(SDL_GRAB_OFF);
 	if (result == LEVEL_QUIT) {
-		SDL_Quit();
-		exit(0);
+		open_menu(a, MENU_MAIN);
+		return;
 	}
 	game_save_level(g);
 
@@ -131,7 +159,7 @@ static void level_finished(App *a)
 	case LEVEL_LOST:
 		if (!g->pl.lives) {
 			text_score(TXT_GAME_OVER_SCORE, g->pl.score);
-			show_screen(a, TXT_GAME_OVER, TXT_PRESS_FIRE, NEXT_NEW_GAME);
+			show_screen(a, TXT_GAME_OVER, TXT_PRESS_FIRE, NEXT_MENU);
 			return;
 		}
 		*text_at(TXT_LIVES_DIGIT) = (uint8_t)('0' + g->pl.lives);
@@ -160,6 +188,32 @@ static void run_next(App *a)
 	case NEXT_PLAY_BONUS: start_play(a, 0, 1); break;
 	case NEXT_ADVANCE: advance(a); break;
 	case NEXT_NEW_GAME: new_game(a); break;
+	case NEXT_MENU:
+		if (a->autoplay) {
+			new_game(a);
+			break;
+		}
+		open_menu(a, MENU_MAIN);
+		if (!a->autoplay)
+			menu_submit_score(&a->menu, a->g.pl.score, a->diff);
+		break;
+	}
+}
+
+static void menu_action(App *a, MenuAction action)
+{
+	if (!menu_save(&a->menu, exe_config_path()))
+		fprintf(stderr, "Could not save SDL menu settings.\n");
+	if (action == MENU_EXIT) {
+		SDL_Quit();
+		exit(0);
+	}
+	if (action == MENU_NEW_GAME)
+		new_game(a);
+	else if (action == MENU_PLAY) {
+		a->zone = a->menu.sector;
+		a->level = 0;
+		show_intro(a);
 	}
 }
 
@@ -224,13 +278,18 @@ static void handle_event(App *a, const SDL_Event *e)
 		break;
 	case SDL_MOUSEMOTION:
 		video_to_game(e->motion.x, e->motion.y, &a->mouse_x, &a->mouse_y);
-		if (a->playing && !g->paused)
-			g->in.mouse_dx += video_game_dx(e->motion.xrel);
+		if (a->menu_active)
+			menu_mouse(&a->menu, a->mouse_x, a->mouse_y, 0);
+		else if (a->playing && !g->paused)
+			g->in.mouse_dx += video_game_dx(e->motion.xrel) * (a->menu.sensitivity + 1) / 4;
 		break;
 	case SDL_MOUSEBUTTONDOWN:
 		if (e->button.button != SDL_BUTTON_LEFT)
 			break;
-		if (a->playing) {
+		if (a->menu_active) {
+			video_to_game(e->button.x, e->button.y, &a->mouse_x, &a->mouse_y);
+			menu_action(a, menu_mouse(&a->menu, a->mouse_x, a->mouse_y, 1));
+		} else if (a->playing) {
 			g->in.click = 1;
 			g->in.button = 1;
 		} else if (a->fade_dir >= 0) {
@@ -250,6 +309,25 @@ static void handle_event(App *a, const SDL_Event *e)
 		}
 		if (k == SDLK_F12) {
 			video_save_bmp("screenshot.bmp");
+			break;
+		}
+		if (a->menu_active) {
+			if (a->menu.page == MENU_NAME && k != SDLK_RETURN && k != SDLK_ESCAPE)
+				menu_name_key(&a->menu, (int)k);
+			else if (k == SDLK_h && a->menu.page == MENU_MAIN)
+				menu_open(&a->menu, MENU_SCORES);
+			else if (k == SDLK_UP)
+				menu_action(a, menu_key(&a->menu, MENU_UP));
+			else if (k == SDLK_DOWN)
+				menu_action(a, menu_key(&a->menu, MENU_DOWN));
+			else if (k == SDLK_LEFT)
+				menu_action(a, menu_key(&a->menu, MENU_LEFT));
+			else if (k == SDLK_RIGHT)
+				menu_action(a, menu_key(&a->menu, MENU_RIGHT));
+			else if (k == SDLK_RETURN || k == SDLK_SPACE || k == SDLK_LCTRL)
+				menu_action(a, menu_key(&a->menu, MENU_ACCEPT));
+			else if (k == SDLK_ESCAPE)
+				menu_action(a, menu_key(&a->menu, MENU_BACK));
 			break;
 		}
 		if (k == SDLK_TAB) {
@@ -286,6 +364,10 @@ static void step(App *a)
 {
 	Game *g = &a->g;
 
+	if (a->menu_active) {
+		menu_draw(&a->menu);
+		return;
+	}
 	if (!a->playing) {
 		a->fade += a->fade_dir;
 		if (a->fade >= 0x100) {
@@ -331,18 +413,23 @@ int main(int argc, char *argv[])
 	SDL_Event event;
 	Uint32 next_tick;
 	const char *exe_path = NULL, *shot_path = NULL;
+	const char *audio_path = NULL;
+	int audio_track = -1, audio_effect = -1, audio_seconds = 10;
 	int shot_frames = 0, frame = 0;
 	int i, loaded = 0;
+	int difficulty_override = -1;
 
 	a->diff = DIFF_NORMAL;
 	a->start_zone = 1;
+	menu_init(&a->menu);
 
-	/* [CYBER.EXE] [--stage zone level] [--novice|--expert] [--cheat] [--auto] [--sheet] [--shot out.bmp frames] */
+	/* [CYBER.EXE|CYBPLUS.EXE] [--stage zone level] [--novice|--expert] [--cheat] [--auto] [--sheet] [--shot out.bmp frames] */
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--shot") && i + 2 < argc) {
 			shot_path = argv[++i];
 			shot_frames = atoi(argv[++i]);
 		} else if (!strcmp(argv[i], "--stage") && i + 2 < argc) {
+			a->direct_start = 1;
 			a->start_zone = atoi(argv[++i]);
 			a->start_level = atoi(argv[++i]) - 1;
 			if (a->start_zone < 0 || a->start_zone > 5)
@@ -350,9 +437,9 @@ int main(int argc, char *argv[])
 			if (a->start_level < 0 || a->start_level >= zone_levels[a->start_zone])
 				a->start_level = 0;
 		} else if (!strcmp(argv[i], "--novice")) {
-			a->diff = DIFF_NOVICE;
+			difficulty_override = DIFF_NOVICE;
 		} else if (!strcmp(argv[i], "--expert")) {
-			a->diff = DIFF_EXPERT;
+			difficulty_override = DIFF_EXPERT;
 		} else if (!strcmp(argv[i], "--cheat")) {
 			a->cheats = 1;
 		} else if (!strcmp(argv[i], "--auto")) {
@@ -378,6 +465,8 @@ int main(int argc, char *argv[])
 		SDL_Quit();
 		return 1;
 	}
+	menu_load(&a->menu, exe_config_path());
+	a->diff = difficulty_override >= 0 ? (Difficulty)difficulty_override : a->menu.difficulty;
 
 	if (!video_init(640, 400, 0)) {
 		SDL_Quit();
@@ -386,7 +475,12 @@ int main(int argc, char *argv[])
 	SDL_ShowCursor(SDL_DISABLE);
 
 	rng_seed(shot_path ? 1 : (uint16_t)SDL_GetTicks());
+	a->menu.difficulty = a->diff;
+	text_reset();
+	if (a->direct_start || a->autoplay)
 	new_game(a);
+	else
+		open_menu(a, a->menu.page);
 
 	next_tick = SDL_GetTicks();
 	for (;;) {

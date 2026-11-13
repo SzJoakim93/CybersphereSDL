@@ -27,5 +27,6 @@ void text_score(uint16_t off, uint32_t v);
 void text_tally(Game *g, int y, int bonus_index);
 
 void screen_render(uint16_t block1, uint16_t block2, int bright);
+void screen_background(uint16_t offset, int bright, int logo);
 
 #endif
