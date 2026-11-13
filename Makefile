@@ -26,6 +26,7 @@ COMPILER_FLAGS = -w -g -std=c99 -DUSE_SDL=1
 
 ifeq ($(OS),Windows_NT)
 	LINKER_FLAGS = -mwindows -lMingw32 -lSDLmain -lSDL
+	RESOURCE = bin/icon.o
 else
 	LINKER_FLAGS = -lSDL
 endif
@@ -47,3 +48,8 @@ OBJ_NAME = Cybersphere-SDL
 .PHONY: all
 all : $(OUT_DIR) $(OBJS) $(RESOURCE)
 	$(CC) $(OBJS) $(RESOURCE) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OUT_DIR)/$(OBJ_NAME)
+
+ifeq ($(OS),Windows_NT)
+bin/icon.o: src/icon.rc src/icon.ico | $(OUT_DIR)
+	windres -i $< -I src -O coff -o $@
+endif
