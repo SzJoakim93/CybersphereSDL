@@ -30,9 +30,20 @@ else
 	LINKER_FLAGS = -lSDL
 endif
 
+# Directory to be created
+OUT_DIR := bin
+
+#Create directory if it doesn't exist
+$(OUT_DIR):
+	@echo "Checking for directory: $(OUT_DIR)"
+	@mkdir -p $(OUT_DIR)
+	@echo "Directory ready: $(OUT_DIR)"
+
 #OBJ_NAME specifies the name of our exectuable
-OBJ_NAME = bin/Cybersphere-SDL
+OBJ_NAME = Cybersphere-SDL
 
 #This is the target that compiles our executable
-all : $(OBJS) $(RESOURCE)
-	$(CC) $(OBJS) $(RESOURCE) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OBJ_NAME)
+.DEFAULT_GOAL := all
+.PHONY: all
+all : $(OUT_DIR) $(OBJS) $(RESOURCE)
+	$(CC) $(OBJS) $(RESOURCE) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OUT_DIR)/$(OBJ_NAME)
