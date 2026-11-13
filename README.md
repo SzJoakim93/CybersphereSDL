@@ -8,25 +8,23 @@ Cybersphere SDL is an SDL port based on the MS-DOS version of **Cybersphere** an
 
 ## Status
 
-* There is no public release yet.
 * All known original gameplay features from the DOS version are working.
-
-## Missing features
-* Menu implementation
-* Sound
-* Music
-* CyberspherePlus compatibility
+* Both Cybersphere and CyberspherePlus games are working
+* Unlocked levels saved after closing the game too
+* A separate cfg file will be created on using both game in some folder
 
 ## Usage
 
 ### Run the game
 
-Before running the game, copy the original CYBER.EXE next to the new binary file. The original EXE functionals as asset file only. Instruction is not executed via emulation or compatibility layer.
+Before running the game, copy the original CYBER.EXE or CYBPLUS.EXE next to the new binary file. The original EXE functionals as asset file only. Instruction is not executed via emulation or compatibility layer.
 
 Then start the game:
 
 * **Windows:** Run `Cybersphere-SDL.exe`
 * **Linux:** Run `./Cybersphere-SDL`
+
+Note: If you want to use CYBER.EXE and CYBPLUS.EXE in one folder, without program arguments it starts Cybersphere. To start cyberspherePlus run Cybersphere-SDL with CYBPLUS.EXE in program argument.
 
 ### Controls
 
