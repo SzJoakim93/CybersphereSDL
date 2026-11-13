@@ -41,6 +41,7 @@ typedef struct {
 	Next next;
 	int sheet;
 	int mouse_x, mouse_y;
+	int invert_mouse_motion; /* WSLg reports relative motion with the opposite sign. */
 } App;
 
 static void open_menu(App *a, MenuPage page)
@@ -284,7 +285,8 @@ static void handle_event(App *a, const SDL_Event *e)
 		if (a->menu_active)
 			menu_mouse(&a->menu, a->mouse_x, a->mouse_y, 0);
 		else if (a->playing && !g->paused)
-			g->in.mouse_dx += video_game_dx(e->motion.xrel) * (a->menu.sensitivity + 1) / 4;
+			g->in.mouse_dx += video_game_dx(a->invert_mouse_motion ? -e->motion.xrel : e->motion.xrel) *
+				(a->menu.sensitivity + 1) / 4;
 		break;
 	case SDL_MOUSEBUTTONDOWN:
 		if (e->button.button != SDL_BUTTON_LEFT)
@@ -424,6 +426,7 @@ int main(int argc, char *argv[])
 
 	a->diff = DIFF_NORMAL;
 	a->start_zone = 1;
+	a->invert_mouse_motion = getenv("WSL_INTEROP") != NULL;
 	menu_init(&a->menu);
 
 	/* [CYBER.EXE|CYBPLUS.EXE] [--stage zone level] [--novice|--expert] [--cheat] [--auto] [--sheet] [--shot out.bmp frames] */
