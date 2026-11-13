@@ -106,6 +106,8 @@ make
 ./bin/Cybersphere-SDL
 ```
 
+GitHub Actions also builds the Linux executable on every push and pull request. Download the `Cybersphere-SDL-linux` artifact from the workflow run to try that build.
+
 ## SDL Joystick Controls
 
 The SDL 1.2 port uses the first connected joystick or gamepad.
