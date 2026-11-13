@@ -112,7 +112,10 @@ const uint8_t *font_glyph(char c)
 int stage_param_index(int episode, int level)
 {
 	const uint8_t *t = exe_ptr(SEG_DATA, DS_STAGE_TABLE, NUM_EPISODES * LEVELS_PER_EPISODE);
-	int v = t[episode * LEVELS_PER_EPISODE + level] - 1;
+	int v;
+	if (!t || episode < 0 || episode >= NUM_EPISODES || level < 0 || level >= LEVELS_PER_EPISODE)
+		return -1;
+	v = t[episode * LEVELS_PER_EPISODE + level] - 1;
 	return v < 0 ? 0 : v;
 }
 
@@ -124,9 +127,13 @@ int stage_params(int index, StageParams *out)
 	if (index < 0 || index >= NUM_STAGE_PARAMS)
 		return 0;
 	p = exe_ptr(SEG_DATA, (uint16_t)(DS_STAGE_PARAM + index * STAGE_PARAM_SIZE), STAGE_PARAM_SIZE);
+	if (!p)
+		return 0;
 	out->layout = rd16(p + 0);
 	out->layer2 = rd16(p + 2);
 	out->music = rd16(p + 4);
+	if (out->layout < 1 || out->layout > NUM_LAYOUTS || out->layer2 > NUM_LAYERS2 || out->music > 9)
+		return 0;
 	for (i = 0; i < NUM_PULSES; i++) {
 		const uint8_t *q = p + 6 + i * 10;
 		out->pulse[i].phase = rd16(q + 0);
@@ -134,6 +141,8 @@ int stage_params(int index, StageParams *out)
 		out->pulse[i].start = rd16(q + 4);
 		out->pulse[i].count = rd16(q + 6);
 		out->pulse[i].min_bright = rd16(q + 8);
+		if (out->pulse[i].start + out->pulse[i].count > 256 || out->pulse[i].min_bright > 256)
+			return 0;
 	}
 	return 1;
 }
@@ -148,6 +157,8 @@ int layout_load(int layout, LevelData *out)
 		p = exe_ptr(SEG_LEVELS_A, (uint16_t)((layout - 1) * LEVEL_SIZE), LEVEL_SIZE);
 	else
 		p = exe_ptr(SEG_LEVELS_B, (uint16_t)((layout - 41) * LEVEL_SIZE), LEVEL_SIZE);
+	if (!p)
+		return 0;
 	memcpy(out, p, LEVEL_SIZE);
 	return 1;
 }

@@ -9,12 +9,14 @@
 #include "video.h"
 #include "menu.h"
 #include "sound.h"
+#include "exe.h"
 
 #define FPS 70 /* mode 13h refresh, the game is vsync-locked */
 #define KEY_SPEED 0x180
 
 static const char *exe_candidates[] = {
-	"CYBER.EXE"
+	"CYBER.EXE",
+	"CYBPLUS.EXE"
 };
 
 /* Levels per zone; zone 0 holds the bonus stages (checks at 1000:028b) */
@@ -100,7 +102,7 @@ static void new_game(App *a)
 	a->level = a->start_level;
 	a->bonus_index = rng(10);
 	if (a->direct_start || a->autoplay)
-	show_intro(a);
+		show_intro(a);
 	else
 		open_menu(a, MENU_SECTORS);
 }
@@ -128,7 +130,7 @@ static void advance(App *a)
 	if (a->autoplay) {
 		if (++a->zone > 5)
 			a->zone = 1;
-	show_intro(a);
+		show_intro(a);
 	} else {
 		open_menu(a, MENU_SECTORS);
 	}
@@ -475,7 +477,7 @@ int main(int argc, char *argv[])
 	for (i = 0; !loaded && !exe_path && i < (int)(sizeof(exe_candidates) / sizeof(*exe_candidates)); i++)
 		loaded = assets_init(exe_candidates[i]);
 	if (!loaded) {
-		fprintf(stderr, "CYBER.EXE not found. Pass its path as the first argument.\n");
+		fprintf(stderr, "CYBER.EXE or CYBPLUS.EXE not found. Pass its path as the first argument.\n");
 		SDL_Quit();
 		return 1;
 	}
@@ -505,7 +507,7 @@ int main(int argc, char *argv[])
 	a->menu.difficulty = a->diff;
 	text_reset();
 	if (a->direct_start || a->autoplay)
-	new_game(a);
+		new_game(a);
 	else
 		open_menu(a, a->menu.page);
 
