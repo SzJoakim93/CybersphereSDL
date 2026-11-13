@@ -146,12 +146,13 @@ void bricks_process_hits(Game *g, HitTest *t)
 	g->scan_row = 0;
 	sound_play(SFX_BRICK_HIT);
 
+	if (!ENTRY_NEXT(t->hits[0].entry))
+		brick_destroyed(g, t->hits[0].cell);
+
 	for (i = 0; i < t->count; i++) {
 		uint32_t e = t->hits[i].entry;
 		int cell = t->hits[i].cell;
 
-		if (!ENTRY_NEXT(e))
-			brick_destroyed(g, cell);
 		g->pl.score += ENTRY_SCORE(e);
 		*cell_ptr(g, cell) = (uint8_t)ENTRY_NEXT(e);
 		fx_brick_flash(&g->fx, cell);

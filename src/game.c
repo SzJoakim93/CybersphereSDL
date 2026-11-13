@@ -39,6 +39,16 @@ int game_start_level(Game *g, int zone, int level, int restore)
 	}
 	layer2_load(lv->params.layer2, &lv->layer2);
 
+	p->wide = 0;
+	p->fire = 0;
+	p->hold = 0;
+	p->gems = 0;
+	g->guard_timer = 0;
+	if (!restore || !g->has_saved) {
+		g->guard_type = 0;
+		g->guard_color = 0;
+	}
+
 	/* the guard brick is whatever sits in the middle of the bottom row */
 	if (!g->guard_type) {
 		g->guard_type = b->type[GUARD_ROW + 8];
